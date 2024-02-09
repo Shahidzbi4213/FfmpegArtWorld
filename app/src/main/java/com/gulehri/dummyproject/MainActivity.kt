@@ -2,13 +2,18 @@ package com.gulehri.dummyproject
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.ThumbnailUtils
 import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
+import android.util.Size
 import android.view.Surface
 import android.view.SurfaceHolder
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +35,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var videoUri: Uri
     private lateinit var audioUri: Uri
     private lateinit var mediaPlayer: MediaPlayer
+    private var isPauseDueToBg = false
+    private var lastAudioPositionBeforePause = 0
+    private var lastVideoPositionBeforePause = 0
 
     private val videoLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) {
@@ -78,10 +86,9 @@ class MainActivity : AppCompatActivity() {
 
             CoroutineScope(Dispatchers.IO).launch {
 
-
                 FFmpeg.executeAsync(
                     "-i $videoFilePath -i $audioFilePath -map 0:v -map 1:a -c:v copy -shortest $output"
-                ) { executionId, returnCode ->
+                ) { _, returnCode ->
 
                     if (returnCode == RETURN_CODE_SUCCESS) {
                         showToast()
@@ -100,18 +107,65 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setVideoPlayer() {
-        binding.videoView.setVideoURI(videoUri)
-        binding.videoView.setOnCompletionListener {
-            it.stop()
+
+        var bitmap:Bitmap? = null
+        binding.videoView.apply {
+            setVideoURI(videoUri)
+        }
+
+
+        Util.getRealPathFromURI(baseContext, videoUri)?.let {
+             bitmap = ThumbnailUtils.createVideoThumbnail(it,ThumbnailUtils.OPTIONS_RECYCLE_INPUT)
+            binding.imageView.setImageBitmap(bitmap)
+        }
+
+        binding.videoView.setOnCompletionListener { videoPlayer ->
+            videoPlayer.stop()
             mediaPlayer.stop()
+            binding.imageView.setImageBitmap(bitmap)
+
         }
     }
 
     private fun setAudioPlayer() {
         mediaPlayer = MediaPlayer.create(baseContext, audioUri)
         mediaPlayer.start()
+        binding.imageView.visibility = View.GONE
         binding.videoView.start()
     }
 
+
+    override fun onResume() {
+        super.onResume()
+
+        if (isPauseDueToBg && ::mediaPlayer.isInitialized) {
+            isPauseDueToBg = false
+            binding.videoView.apply {
+                seekTo(lastVideoPositionBeforePause)
+                start()
+            }
+            mediaPlayer.apply {
+                seekTo(lastAudioPositionBeforePause)
+                start()
+            }
+
+            lastAudioPositionBeforePause = 0
+            lastVideoPositionBeforePause = 0
+        }
+    }
+
+
+    override fun onPause() {
+        super.onPause()
+
+        if (::mediaPlayer.isInitialized) {
+            lastAudioPositionBeforePause = mediaPlayer.currentPosition
+            lastVideoPositionBeforePause = binding.videoView.currentPosition
+
+            binding.videoView.pause()
+            mediaPlayer.pause()
+            isPauseDueToBg = true
+        }
+    }
 
 }
