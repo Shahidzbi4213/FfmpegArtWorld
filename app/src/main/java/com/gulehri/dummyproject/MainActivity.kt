@@ -80,12 +80,13 @@ class MainActivity : AppCompatActivity() {
 
 
                 FFmpeg.executeAsync(
-                    "-i $videoFilePath -i $audioFilePath -af \"afade=out:st=10:d=2\" -map 0:v -map 1:a -c:v copy -shortest $output"
+                    "-i $videoFilePath -i $audioFilePath -map 0:v -map 1:a -c:v copy -shortest $output"
                 ) { executionId, returnCode ->
 
                     if (returnCode == RETURN_CODE_SUCCESS) {
                         showToast()
                     }
+
                 }
             }
         }
